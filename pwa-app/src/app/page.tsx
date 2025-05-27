@@ -1,81 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { subscribeUser, unsubscribeUser, sendNotification } from './actions'
+import { useRef } from 'react'
 
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-
-  const rawData = window.atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i)
-  }
-  return outputArray
-}
-
-function PushNotificationManager() {
-  const [isSupported, setIsSupported] = useState(false)
-  const [subscription, setSubscription] = useState<PushSubscription | null>(
-    null
-  )
-  const [message, setMessage] = useState('')
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      setIsSupported(true)
-      registerServiceWorker()
-    }
-  }, [])
-
-  async function registerServiceWorker() {
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/',
-      updateViaCache: 'none',
-    })
-    const sub = await registration.pushManager.getSubscription()
-    setSubscription(sub)
-  }
-
-  async function subscribeToPush() {
-    const registration = await navigator.serviceWorker.ready
-    const sub = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(
-        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-      ),
-    })
-    setSubscription(sub)
-    const serializedSub = JSON.parse(JSON.stringify(sub))
-    await subscribeUser(serializedSub)
-  }
-
-  async function unsubscribeFromPush() {
-    await subscription?.unsubscribe()
-    setSubscription(null)
-    await unsubscribeUser()
-  }
-
-  async function sendTestNotification() {
-    if (subscription) {
-      await sendNotification(message)
-      setMessage('')
-    }
-  }
-
-  if (!isSupported) {
-    return <p>Push notifications are not supported in this browser.</p>
-  }
-
-  function triggerVibration() {
-    if ('vibrate' in navigator) {
-      navigator.vibrate([200, 100, 200])
-    } else {
-      alert('Vibration non supportée')
-    }
-  }
+function EventManager() {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   function playBeep() {
     const audio = new Audio('/beep.mp3')
@@ -102,38 +31,94 @@ function PushNotificationManager() {
   }
 
   function alertEffect() {
-    triggerVibration()
     flashScreen()
     playBeep()
   }
 
+  async function openCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+      }
+    } catch (err) {
+      alert('Impossible d\'accéder à la caméra')
+      console.error(err)
+    }
+  }
+
+  const [location, setLocation] = useState<string | null>(null)
+
+  function getLocation() {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords
+          setLocation(`Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`)
+        },
+        (err) => {
+          setLocation("Impossible d'obtenir la position.")
+        }
+      )
+    } else {
+      setLocation("Géolocalisation non supportée.")
+    }
+  }
+
+  const iosButton: React.CSSProperties = {
+    padding: '12px 24px',
+    margin: '8px',
+    border: 'none',
+    borderRadius: '22px',
+    background: 'linear-gradient(90deg, #f5f6fa 0%, #e1e8ed 100%)',
+    color: '#222',
+    fontWeight: 600,
+    fontSize: '16px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    transition: 'background 0.2s, box-shadow 0.2s',
+    outline: 'none',
+    cursor: 'pointer',
+  }
+
+  const iosButtonActive: React.CSSProperties = {
+    ...iosButton,
+    background: 'linear-gradient(90deg, #e1e8ed 0%, #f5f6fa 100%)',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+  }
+
+  const videoStyle: React.CSSProperties = {
+    marginTop: '18px',
+    width: '90vw',
+    maxWidth: '340px',
+    height: '220px',
+    borderRadius: '18px',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+    background: '#000',
+    objectFit: 'cover',
+    display: 'block',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+  }
+
   return (
-    <div>
-      <h3>Push Notifications</h3>
-      {subscription ? (
-        <>
-          <p>You are subscribed to push notifications.</p>
-          <button onClick={unsubscribeFromPush}>Unsubscribe</button>
-          <input
-            type="text"
-            placeholder="Enter notification message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-          <button onClick={sendTestNotification}>Send Test</button>
-        </>
-      ) : (
-        <>
-          <p>You are not subscribed to push notifications.</p>
-          <button onClick={subscribeToPush}>Subscribe</button>
-        </>
-      )}
-      <div>
-        <button onClick={triggerVibration}>Vibration</button>
-        <button onClick={flashScreen}>Flash écran</button>
-        <button onClick={playBeep}>Bip sonore</button>
-        <button onClick={alertEffect}>Tous en même temps</button>
+    <div style={{ padding: 16, maxWidth: 400, margin: '0 auto' }}>
+      <h3 style={{ fontFamily: 'San Francisco, Arial, sans-serif', fontWeight: 700, fontSize: 22, marginBottom: 18, color: '#222' }}>
+        Événements
+      </h3>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button style={iosButton} onClick={flashScreen}>Flash écran</button>
+        <button style={iosButton} onClick={playBeep}>Bip sonore</button>
+        <button style={iosButton} onClick={alertEffect}>Tous en même temps</button>
+        <button style={iosButton} onClick={openCamera}>Ouvrir la caméra</button>
+        <button style={iosButton} onClick={getLocation}>Obtenir la position</button>
       </div>
+      {location && (
+        <p style={{ textAlign: 'center', marginTop: '12px', color: '#555' }}>
+          Position actuelle : <strong>{location}</strong>
+        </p>
+      )}
+      <video ref={videoRef} style={videoStyle} autoPlay muted />
     </div>
   )
 }
@@ -155,31 +140,32 @@ function InstallPrompt() {
   }
 
   return (
-    <div>
-      <h3>Install App</h3>
-      <button>Add to Home Screen</button>
+    <div style={{ padding: '1rem', textAlign: 'center', fontFamily: 'system-ui' }}>
+      <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>
+        Installer l’application
+      </h3>
       {isIOS && (
-        <p>
-          To install this app on your iOS device, tap the share button
+        <p style={{ fontSize: '0.95rem', color: '#555' }}>
+          Sur votre iPhone, appuyez sur le bouton de partage
           <span role="img" aria-label="share icon">
-            {' '}
-            ⎋{' '}
+            {' '}📤{' '}
           </span>
-          and then "Add to Home Screen"
+          puis sélectionnez <strong>« Sur l’écran d’accueil »</strong>
           <span role="img" aria-label="plus icon">
-            {' '}
-            ➕{' '}
-          </span>.
+            {' '}➕
+          </span>
+          .
         </p>
       )}
     </div>
+
   )
 }
 
 export default function Page() {
   return (
     <div>
-      <PushNotificationManager />
+      <EventManager />
       <InstallPrompt />
     </div>
   )
